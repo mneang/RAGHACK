@@ -4,6 +4,7 @@ from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
 from pydantic import BaseModel
 import requests
+from langdetect import detect, LangDetectException
 
 app = FastAPI()
 
@@ -18,6 +19,10 @@ search_client = SearchClient(
 translator_key = "6636bb193d854b3fb496f9383050ed6f"
 translator_region = "westus"
 translator_endpoint = "https://api.cognitive.microsofttranslator.com/translate?api-version=3.0"
+
+# List of cities in English and Japanese
+toshi = ["tokyo", "osaka", "kyoto", "nara", "hokkaido", "nagoya", "fukuoka", "hiroshima", "nikko", "kobe"]
+toshi_jp = ["東京", "大阪", "京都", "奈良", "北海道", "名古屋", "福岡", "広島", "日光", "神戸"]
 
 # Translation function to handle non-English/Japanese inputs
 def translate_text(text, to_language="en"):
@@ -46,7 +51,7 @@ def translate_response_to_japanese(response):
     return response_json[0]["translations"][0]["text"]
 
 # Fallback response if search fails or query is too general
-def fallback_response(query):
+def fallback_response(query, is_japanese=False):
     fallback_responses = {
         "travel_advice": "Japan offers a variety of experiences, from the bustling streets of Tokyo to the serene temples of Kyoto. Be sure to explore!",
         "where_to_go": "If you're unsure where to start in Japan, I recommend visiting popular cities like Tokyo, Osaka, and Kyoto.",
@@ -54,15 +59,22 @@ def fallback_response(query):
         "food": "Japanese cuisine is world-renowned. Be sure to try sushi, ramen, tempura, and street food like takoyaki and okonomiyaki.",
         "general": "I'm here to help with travel advice about Japan. Please ask me about cities, landmarks, food, or the weather."
     }
+
     if "where" in query.lower() or "go" in query.lower():
-        return fallback_responses["where_to_go"]
+        response = fallback_responses["where_to_go"]
     elif "do" in query.lower() or "activities" in query.lower():
-        return fallback_responses["what_to_do"]
+        response = fallback_responses["what_to_do"]
     elif "food" in query or "eat" in query:
-        return fallback_responses["food"]
+        response = fallback_responses["food"]
     else:
-        return fallback_responses["general"]
-    
+        response = fallback_responses["general"]
+
+    # Translate fallback response to Japanese if the original query was in Japanese
+    if is_japanese:
+        response = translate_response_to_japanese(response)
+
+    return response
+
 # Helper to format weather info based on the specific season asked
 def format_weather(weather_data, query):
     if "summer" in query:
@@ -88,7 +100,22 @@ async def search(search_query: SearchQuery):
     query = search_query.query.lower()
     logging.info(f"Received query: {query}")
 
-    is_japanese = any('\u4e00' <= char <= '\u9fff' for char in query)
+    try:
+        # Detect the language of the query
+        detected_language = detect(query)
+        logging.info(f"Detected language: {detected_language}")
+
+        # If the language is not Japanese or English, return a specific message
+        if detected_language not in ["en", "ja"]:
+            return {"message": "Please use Japanese or English. 日本語か英語を使用してください。"}
+    except LangDetectException:
+        # Handle case where language detection fails (empty or ambiguous input)
+        return {"message": "Unable to detect language. Please use Japanese or English.　言語を検出できませんでした。日本語か英語を使用してください。"}
+
+    # Convert query to lowercase
+    query = query.lower()
+
+    is_japanese = detected_language == "ja"
 
     # If the query is in Japanese, translate it to English
     if is_japanese:
@@ -96,22 +123,14 @@ async def search(search_query: SearchQuery):
         query = translate_text(query, to_language="en")
         logging.info(f"Translated query: {query}")
 
-    # Handle general fallback cases for unrecognized or incomplete queries
-    if len(query.split()) < 3:
-        return {"message": "I'm here to provide advice about Japan travel. Please ask me your questions about cities, landmarks, food, or the weather."}
+    # Check if the query mentions any city from the "toshi" list in either English or Japanese. "Toshi" (都市) means "city" in Japanese.
+    city_mentioned = any(city in query for city in toshi) or any(city in search_query.query for city in toshi_jp)
 
-    # Fallback response for travel advice, where to go, or activities in Japan
-    if "travel advice" in query:
-        return {"message": "Japan offers a variety of experiences, from the bustling streets of Tokyo to the serene temples of Kyoto. Be sure to explore!"}
-    elif "where should i go" in query or "where to go" in query:
-        return {"message": "If you're unsure where to start in Japan, I recommend visiting popular cities like Tokyo, Osaka, and Kyoto."}
-    elif "what to do" in query or "activities" in query:
-        return {"message": "Japan offers a range of activities, from visiting historical sites to indulging in Japanese cuisine."}
-    elif "travel" in query and not any(x in query for x in ["to", "from"]):
-        return {"message": "Japan's transportation system is highly developed. You can travel between cities quickly using the Shinkansen (bullet train), planes, or buses."}
+    # If no city is mentioned, trigger the fallback response for general queries
+    if not city_mentioned:
+        return {"message": fallback_response(query, is_japanese)}
 
-
-    # Perform search on Azure Cognitive Search
+    # Perform search on Azure Cognitive Search if a city is mentioned
     search_results = search_client.search(search_text=query)
     search_results_list = list(search_results)
 
@@ -126,35 +145,26 @@ async def search(search_query: SearchQuery):
         weather_data = first_result.get('weather', {})
         landmarks = first_result.get('landmarks', [])
 
+        # If the query mentions a city but doesn't specify a category, return the city description
+        if not any(x in query for x in ["weather", "food", "landmark", "sightseeing", "attraction", "must-see", "eat"]):
+            response["message"] = description
+        
         # Handle weather queries
-        if any(x in query for x in ["weather", "summer", "winter", "spring", "autumn", "fall"]):
+        elif any(x in query for x in ["weather", "summer", "winter", "spring", "autumn", "fall"]):
             weather_info = format_weather(weather_data, query)
             response["message"] = f"{weather_info}"
 
         # Handle food queries specifically for the city in the search result
-        elif "food" in query or "eat" in query:
-            # Check if the query is about food in Japan (no city mentioned)
-            if "japan" in query or "日本" in query:
-                response["message"] = "Japanese cuisine is world-renowned. Be sure to try sushi, ramen, tempura, and street food like takoyaki and okonomiyaki."
-            # If a specific city is mentioned, provide city-specific food info
-            elif any(city in query for city in ["tokyo", "osaka", "kyoto", "nara", "hokkaido"]):
-                response["message"] = f"{food_info}."
-            # If no city is mentioned but there's food info, provide that city's food info
-            else:
-                response["message"] = f"Here is what {city.capitalize()} is famous for: {food_info}."
-
+        elif any(x in query for x in ["food","eat","cuisine","gastronomy","rice"]):
+            response["message"] = f"{food_info}."
 
         # Handle landmark queries
-        elif any(x in query for x in ["landmark", "sightseeing", "attraction", "must-see"]):
+        elif any(x in query for x in ["landmark", "sightseeing", "attraction", "must-see", "famous", "sites", "history"]):
             if landmarks:
                 landmark_list = "\n".join(landmarks)
                 response["message"] = f"In {city}, some popular landmarks include:\n{landmark_list}"
             else:
                 response["message"] = f"No specific landmarks found for {city}."
-
-        # For general queries, return the description of the city
-        else:
-            response["message"] = description
 
         # Translate response back to Japanese if needed
         if is_japanese:
@@ -165,5 +175,6 @@ async def search(search_query: SearchQuery):
         return response
     else:
         # Use static fallback response if no search results are found
-        fallback = fallback_response(query)
+        fallback = fallback_response(query, is_japanese)
         return {"message": fallback}
+
