@@ -1,21 +1,36 @@
-from azure.core.credentials import AzureKeyCredential
-from azure.search.documents import SearchClient
+import requests
 import json
 
-# Replace with your actual values
+# Define your Azure Cognitive Search details
 endpoint = "https://raghack2024.search.windows.net"
-api_key = "YTC2IuWkjdDzBprcW6pgp1n89EUoPYtn7RIMQ4PGG6AzSeCWP6u7"
 index_name = "touristdata"
+api_version = "2021-04-30-Preview"  # The version might change; adjust if necessary
+api_key = "YTC2IuWkjdDzBprcW6pgp1n89EUoPYtn7RIMQ4PGG6AzSeCWP6u7"
 
-# Create a client to connect to the search service
-search_client = SearchClient(endpoint=endpoint,
-                             index_name=index_name,
-                             credential=AzureKeyCredential(api_key))
+# Define the search endpoint
+url = f"{endpoint}/indexes/{index_name}/docs/search?api-version={api_version}"
 
-# Read the JSON data file with UTF-8 encoding
-with open('data.json', 'r', encoding='utf-8') as file:
-    documents = json.load(file)
+# Define the headers and body for the search request
+headers = {
+    "Content-Type": "application/json",
+    "api-key": api_key
+}
+body = {
+    "search": "*",  # Wildcard search to fetch all documents
+    "top": 1000  # Adjust the number of documents to fetch as needed
+}
 
-# Upload documents to the index
-result = search_client.upload_documents(documents=documents)
-print(f"Upload result: {result}")
+# Send the search request
+response = requests.post(url, headers=headers, json=body)
+
+# Check if the request was successful
+if response.status_code == 200:
+    data = response.json()
+
+    # Save the JSON data to a file
+    with open("azure_data.json", "w") as json_file:
+        json.dump(data['value'], json_file, indent=4)
+
+    print("Data saved to 'azure_data.json'.")
+else:
+    print(f"Error: {response.status_code}, {response.text}")
