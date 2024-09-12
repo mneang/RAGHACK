@@ -1,10 +1,14 @@
 import logging
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
 from pydantic import BaseModel
 import requests
 from langdetect import detect, LangDetectException
+from azure.cosmos import exceptions, CosmosClient, PartitionKey
+import uuid
+import datetime
+
 
 app = FastAPI()
 
@@ -14,6 +18,32 @@ search_client = SearchClient(
     index_name="touristdata",
     credential=AzureKeyCredential("YTC2IuWkjdDzBprcW6pgp1n89EUoPYtn7RIMQ4PGG6AzSeCWP6u7")
 )
+
+
+
+# Initialize Cosmos DB client
+uri = "https://mneang.documents.azure.com:443/"
+primary_key = "w8tf60FNU5oVrFjEK9hJbxhz3YoJaAd9MKQbb7eRXxiXqsYQG8WLyffxENYTAc9lmGizdtWNJ5WNACDbSnY3Xg=="
+client = CosmosClient(uri, primary_key)
+
+# Define database and container
+database_name = "rag_database"
+container_name = "user_queries"
+
+# Create a database and container (only runs if they don't already exist)
+try:
+    database = client.create_database(database_name)
+except exceptions.CosmosResourceExistsError:
+    database = client.get_database_client(database_name)
+
+try:
+    container = database.create_container(id=container_name, partition_key=PartitionKey(path="/id"))
+except exceptions.CosmosResourceExistsError:
+    container = database.get_container_client(container_name)
+
+# Function to add user query data to Cosmos DB
+def add_query_to_cosmos(query_data):
+    container.create_item(body=query_data)
 
 # Azure Translator setup
 translator_key = "6636bb193d854b3fb496f9383050ed6f"
@@ -57,17 +87,21 @@ def fallback_response(query, is_japanese=False):
         "where_to_go": "If you're unsure where to start in Japan, I recommend visiting popular cities like Tokyo, Osaka, and Kyoto.",
         "what_to_do": "Japan offers a range of activities, from visiting historical sites to indulging in Japanese cuisine.",
         "food": "Japanese cuisine is world-renowned. Be sure to try sushi, ramen, tempura, and street food like takoyaki and okonomiyaki.",
-        "general": "I'm here to help with travel advice about Japan. Please ask me about cities, landmarks, food, or the weather."
+        "general": "Japan offers a rich blend of modern and traditional experiences. From vibrant cities like Tokyo to serene temples in Kyoto, there's so much to explore. Feel free to ask about popular destinations, local cuisine, cultural landmarks, or seasonal weather!",
+        "unrelated": "I'm here to help with travel advice about Japan. If you have any questions about cities, landmarks, food, or the weather, feel free to ask!"
     }
 
     if "where" in query.lower() or "go" in query.lower():
         response = fallback_responses["where_to_go"]
-    elif "do" in query.lower() or "activities" in query.lower():
+    elif any(keyword in query.lower() for keyword in ["do", "activities", "fun", "culture", "experience", "tour"]):
         response = fallback_responses["what_to_do"]
-    elif "food" in query or "eat" in query:
+    elif any(keyword in query for keyword in ["food", "eat", "cuisine", "dishes", "gastronomy", "rice", "drink"]):
         response = fallback_responses["food"]
-    else:
+    elif any(keyword in query for keyword in ["japan", "city", "landmark", "weather", "travel", "sightseeing", "know", "general"]):
         response = fallback_responses["general"]
+    else:
+        # If query is unrelated or random
+        response = fallback_responses["unrelated"]
 
     # Translate fallback response to Japanese if the original query was in Japanese
     if is_japanese:
@@ -96,24 +130,27 @@ class SearchQuery(BaseModel):
     query: str
 
 @app.post("/search")
-async def search(search_query: SearchQuery):
+async def search(search_query: SearchQuery, request:Request):
     query = search_query.query.lower()
     logging.info(f"Received query: {query}")
 
+    user_id = request.client.host  # We are using IP address as user ID for simplicity
+
     try:
-        # Detect the language of the query
-        detected_language = detect(query)
-        logging.info(f"Detected language: {detected_language}")
+            # Detect the language of the query
+            detected_language = detect(query)
+            logging.info(f"Detected language: {detected_language}")
 
-        # If the language is not Japanese or English, return a specific message
-        if detected_language not in ["en", "ja"]:
-            return {"message": "Please use Japanese or English. 日本語か英語を使用してください。"}
+            # If the language is not Japanese or English, return a specific message
+            if detected_language not in ["en", "ja"]:
+                # Fallback: If the query is ASCII and short, treat it as English
+                if query.isascii() and len(query.split()) > 2:
+                    detected_language = "en"  # Assume it's English
+                else:
+                    return {"message": "Please use Japanese or English. 日本語か英語を使用してください。"}
     except LangDetectException:
-        # Handle case where language detection fails (empty or ambiguous input)
-        return {"message": "Unable to detect language. Please use Japanese or English.　言語を検出できませんでした。日本語か英語を使用してください。"}
-
-    # Convert query to lowercase
-    query = query.lower()
+            # Handle case where language detection fails (empty or ambiguous input)
+            return {"message": "Unable to detect language. Please use Japanese or English. 言語を検出できませんでした。日本語か英語を使用してください。"}
 
     is_japanese = detected_language == "ja"
 
@@ -123,6 +160,14 @@ async def search(search_query: SearchQuery):
         query = translate_text(query, to_language="en")
         logging.info(f"Translated query: {query}")
 
+# Store the query in Cosmos DB
+    query_data = {
+        "id": str(uuid.uuid4()),  # Unique ID for each query
+        "query": query,
+        "timestamp": str(datetime.datetime.utcnow())
+    }
+    add_query_to_cosmos(query_data)  # Storing query into Cosmos DB
+
     # Check if the query mentions any city from the "toshi" list in either English or Japanese. "Toshi" (都市) means "city" in Japanese.
     city_mentioned = any(city in query for city in toshi) or any(city in search_query.query for city in toshi_jp)
 
@@ -130,11 +175,16 @@ async def search(search_query: SearchQuery):
     if not city_mentioned:
         return {"message": fallback_response(query, is_japanese)}
 
-    # Perform search on Azure Cognitive Search if a city is mentioned
-    search_results = search_client.search(search_text=query)
-    search_results_list = list(search_results)
+    try:
+            search_results = search_client.search(search_text=query)
+            search_results_list = list(search_results)
+    except Exception as e:
+            logging.error(f"Search query failed: {e}")  # **ADDED**: Log the specific error
+            return {"message": "Search service is currently unavailable."}  # **ADDED**: Handle search failure gracefully
+
 
     if search_results_list:
+        response = {"message": "", "followup": ""}
         first_result = search_results_list[0]
         logging.info(f"Full search result: {first_result}")
 
@@ -148,15 +198,22 @@ async def search(search_query: SearchQuery):
         # If the query mentions a city but doesn't specify a category, return the city description
         if not any(x in query for x in ["weather", "food", "landmark", "sightseeing", "attraction", "must-see", "eat"]):
             response["message"] = description
+
+             # **ADDED**: Suggest follow-up questions about the city
+            response["followup"] = "Want more travel advice? Visit Japan's official tourism website: https://www.japan.travel/en/"
         
         # Handle weather queries
         elif any(x in query for x in ["weather", "summer", "winter", "spring", "autumn", "fall"]):
             weather_info = format_weather(weather_data, query)
             response["message"] = f"{weather_info}"
 
+            response["followup"] = f"Get a live weather forecast for {city} at Weather.com: https://weather.com"
+
         # Handle food queries specifically for the city in the search result
         elif any(x in query for x in ["food","eat","cuisine","gastronomy","rice"]):
             response["message"] = f"{food_info}."
+
+            response["followup"] = f"Want more restaurant options? Check Yelp for {city}: https://www.yelp.com/search?find_desc=restaurants&find_loc={city}"
 
         # Handle landmark queries
         elif any(x in query for x in ["landmark", "sightseeing", "attraction", "must-see", "famous", "sites", "history"]):
@@ -164,12 +221,16 @@ async def search(search_query: SearchQuery):
                 landmark_list = "\n".join(landmarks)
                 response["message"] = f"In {city}, some popular landmarks include:\n{landmark_list}"
             else:
-                response["message"] = f"No specific landmarks found for {city}."
+                response["message"] = f"Sorry, no specific landmarks found for {city}."
+
+            
+            response["followup"] = f"Explore these landmarks on Google Maps: https://www.google.com/maps/search/{city}+landmarks"
 
         # Translate response back to Japanese if needed
         if is_japanese:
             logging.info("Translating response back to Japanese.")
             response["message"] = translate_response_to_japanese(response["message"])
+            response["followup"] = translate_response_to_japanese(response["followup"])
 
         logging.info(f"Responding with: {response['message']}")
         return response
@@ -178,3 +239,18 @@ async def search(search_query: SearchQuery):
         fallback = fallback_response(query, is_japanese)
         return {"message": fallback}
 
+@app.post("/end-session")
+async def end_session(request: Request):
+    user_id = request.client.host  # Using IP address as a simple user ID
+    
+    # Store session end data in Cosmos DB
+    session_end_data = {
+        "id": str(uuid.uuid4()),  # Unique ID for the session end
+        "user_id": user_id,
+        "event": "session_end",
+        "timestamp": str(datetime.datetime.utcnow())
+    }
+    add_query_to_cosmos(session_end_data)  # Store session end event
+    
+    # Return a final message
+    return {"message": "Thank you for using our service! ご利用いただきありがとうございます。"}
