@@ -1,6 +1,5 @@
-# Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
-# More GitHub Actions for Azure: https://github.com/Azure/actions
-# More info on Python, GitHub Actions, and Azure App Service: https://aka.ms/python-webapps-actions
+# Updated GitHub Actions workflow for deploying Python app to Azure Web App
+# This version skips creating a virtual environment (venv).
 
 name: Build and deploy Python app to Azure Web App - sakura-guide-ai
 
@@ -22,11 +21,9 @@ jobs:
         with:
           python-version: '3.12'
 
-      # Install dependencies globally, not in venv
+      # Skip creating virtual environment (venv), directly install dependencies globally
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+        run: pip install -r requirements.txt
         
       # Optional: Add step to run tests here (PyTest, Django test suites, etc.)
 
@@ -61,9 +58,9 @@ jobs:
       - name: Login to Azure
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_B6351CE13D5244CF87FF9375F2E9129E }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_F2B7D2B75E9944AEB55DC484C05627A4 }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_64B84FD3910B47BF80A1448D6FA709C6 }}
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID }}
 
       - name: 'Deploy to Azure Web App'
         uses: azure/webapps-deploy@v3
