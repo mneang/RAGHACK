@@ -8,6 +8,8 @@ from langdetect import detect, LangDetectException
 from azure.cosmos import exceptions, CosmosClient, PartitionKey
 import uuid
 import datetime
+import re
+import gradio as gr
 
 
 app = FastAPI()
@@ -109,22 +111,13 @@ def fallback_response(query, is_japanese=False):
 
     return response
 
-# Helper to format weather info based on the specific season asked
-def format_weather(weather_data, query):
-    if "summer" in query:
-        return weather_data.get('summer', 'No data available for summer.')
-    elif "winter" in query:
-        return weather_data.get('winter', 'No data available for winter.')
-    elif "spring" in query:
-        return weather_data.get('spring', 'No data available for spring.')
-    elif "autumn" in query or "fall" in query:
-        return weather_data.get('autumn', 'No data available for autumn.')
-    else:
-        return (f"Summer: {weather_data.get('summer', 'No information available.')}\n"
-                f"Winter: {weather_data.get('winter', 'No information available.')}\n"
-                f"Spring: {weather_data.get('spring', 'No information available.')}\n"
-                f"Autumn: {weather_data.get('autumn', 'No information available.')}")
-
+# Helper to provide a general weather overview for each city
+def get_weather_overview(weather_data):
+    return (f"Here's the general weather overview for this city:\n"
+            f"Summer: {weather_data.get('summer', 'No data available for summer.')}\n"
+            f"Winter: {weather_data.get('winter', 'No data available for winter.')}\n"
+            f"Spring: {weather_data.get('spring', 'No data available for spring.')}\n"
+            f"Autumn: {weather_data.get('autumn', 'No data available for autumn.')}")
 
 class SearchQuery(BaseModel):
     query: str
@@ -144,8 +137,8 @@ async def search(search_query: SearchQuery, request:Request):
             # If the language is not Japanese or English, return a specific message
             if detected_language not in ["en", "ja"]:
                 # Fallback: If the query is ASCII and short, treat it as English
-                if query.isascii() and len(query.split()) > 2:
-                    detected_language = "en"  # Assume it's English
+                if query.isascii() and len(query.split()) > 1:
+                    detected_language in ["en"]  # Assume it's English
                 else:
                     return {"message": "Please use Japanese or English. 日本語か英語を使用してください。"}
     except LangDetectException:
@@ -171,6 +164,14 @@ async def search(search_query: SearchQuery, request:Request):
     # Check if the query mentions any city from the "toshi" list in either English or Japanese. "Toshi" (都市) means "city" in Japanese.
     city_mentioned = any(city in query for city in toshi) or any(city in search_query.query for city in toshi_jp)
 
+# If a city is mentioned and the query is vague　return the city description
+    if city_mentioned and len(query.split()) == 1:
+        for city in toshi:
+            if city in query:
+                first_result = search_client.search(search_text=city)
+                city_description = first_result['description']
+                return {"message": city_description}
+
     # If no city is mentioned, trigger the fallback response for general queries
     if not city_mentioned:
         return {"message": fallback_response(query, is_japanese)}
@@ -179,8 +180,8 @@ async def search(search_query: SearchQuery, request:Request):
             search_results = search_client.search(search_text=query)
             search_results_list = list(search_results)
     except Exception as e:
-            logging.error(f"Search query failed: {e}")  # **ADDED**: Log the specific error
-            return {"message": "Search service is currently unavailable."}  # **ADDED**: Handle search failure gracefully
+            logging.error(f"Search query failed: {e}")  # Log the specific error
+            return {"message": "Search service is currently unavailable."}  # Handle search failure gracefully
 
 
     if search_results_list:
@@ -199,19 +200,20 @@ async def search(search_query: SearchQuery, request:Request):
         if not any(x in query for x in ["weather", "food", "landmark", "sightseeing", "attraction", "must-see", "eat"]):
             response["message"] = description
 
-             # **ADDED**: Suggest follow-up questions about the city
+             # Suggest follow-up questions about the city
             response["followup"] = "Want more travel advice? Visit Japan's official tourism website: https://www.japan.travel/en/"
         
-        # Handle weather queries
-        elif any(x in query for x in ["weather", "summer", "winter", "spring", "autumn", "fall"]):
-            weather_info = format_weather(weather_data, query)
-            response["message"] = f"{weather_info}"
-
+       # Handle weather queries specifically for the city in the search result
+        elif "weather" in query or any(season in query for season in ["summer", "winter", "spring", "autumn", "fall"]):
+            # Return the general weather overview for the city
+            weather_info = get_weather_overview(weather_data)
+            response["message"] = weather_info
             response["followup"] = f"Get a live weather forecast for {city} at Weather.com: https://weather.com"
+
 
         # Handle food queries specifically for the city in the search result
         elif any(x in query for x in ["food","eat","cuisine","gastronomy","rice"]):
-            response["message"] = f"{food_info}."
+            response["message"] = f"{food_info}.".strip()
 
             response["followup"] = f"Want more restaurant options? Check Yelp for {city}: https://www.yelp.com/search?find_desc=restaurants&find_loc={city}"
 
@@ -223,7 +225,6 @@ async def search(search_query: SearchQuery, request:Request):
             else:
                 response["message"] = f"Sorry, no specific landmarks found for {city}."
 
-            
             response["followup"] = f"Explore these landmarks on Google Maps: https://www.google.com/maps/search/{city}+landmarks"
 
         # Translate response back to Japanese if needed
@@ -254,3 +255,33 @@ async def end_session(request: Request):
     
     # Return a final message
     return {"message": "Thank you for using our service! ご利用いただきありがとうございます。"}
+
+@app.get("/")
+async def root():
+    return {"message": "FastAPI is running."}
+
+# Gradio interface function: combine the message and follow-up clearly
+def chatbot_interface(query):
+    try:
+        response = requests.post("http://127.0.0.1:8000/search", json={"query": query})
+        response_data = response.json()
+
+        # Combine message and followup, ensure no truncation or extra spaces
+        message = response_data.get("message", "No response received")
+        followup = response_data.get("followup", "").strip()
+
+        # Return a combined response
+        return f"{message}\n\n{followup}"  # Add spacing between the message and followup for clarity
+    except Exception as e:
+        return f"Error: {e}"
+
+# Gradio interface with bilingual labels and a subtitle reminder
+iface = gr.Interface(fn=chatbot_interface, 
+                     inputs=gr.Textbox(label="Enter Query | クエリを入力", lines=2),  # Bilingual label for "Enter Query"
+                     outputs=gr.Textbox(label="Output | 出力", lines=10, max_lines=20),  # Bilingual label for "Output"
+                     title="Sakura Guide | さくらガイド",  # Bilingual title
+                     description="Please enter queries in either English or Japanese. | 英語か日本語を使用してください。")  # Subtitle reminding language preference
+
+# Launch Gradio interface only
+if __name__ == "__main__":
+    iface.launch(share=True)
