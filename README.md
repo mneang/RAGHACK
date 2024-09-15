@@ -1,4 +1,4 @@
-# 🌸 Sakura Guide: AI-Powered Travel Assistant for Japan 🌸
+# 🌸 Sakura Guide: AI-Powered Travel Assistant for Japan
 
 ## 1. Background + Overview 🚀
 
