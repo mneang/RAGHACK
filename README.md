@@ -88,12 +88,6 @@ _Example of user queries stored in Cosmos DB, allowing for personalized future r
 - **Multi-Turn Conversations**: We’re adding support for interactive, follow-up conversations, making the travel planning process even more fluid and intuitive.
 - **Scalability Across the Globe**: Built on scalable architecture, **Sakura Guide** is ready to expand beyond Japan and provide real-time, personalized travel experiences in any part of the world.
 
-### Personalized Travel Recommendations Plan 🛣️
-![Personalized Recommendations Plan](path_to_image)
-
-_A future roadmap showing how Cosmos DB logs will power personalized travel suggestions, improving the app's ability to tailor recommendations to individual user preferences._
-
----
 
 ## 6. Caveats and Assumptions ⚠️
 
