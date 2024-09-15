@@ -6,6 +6,7 @@ Exploring Japan should be about experiencing the culture, not worrying about how
 
 Imagine walking through the streets of Tokyo, wondering what to do next. With *Sakura Guide*, you get **immediate**, tailored recommendations based on exactly where you are and what you want to experience.
 
+
 ### The Problem:
 - **Language Barriers**: International tourists often struggle to find accurate, real-time information due to limited English-language resources.
 - **Information Overload**: Domestic travelers, especially during peak times like **Golden Week**, are faced with too many choices and irrelevant suggestions.
@@ -15,8 +16,8 @@ Imagine walking through the streets of Tokyo, wondering what to do next. With *S
 Powered by the latest in AI and cloud technology, **Sakura Guide** adapts to each traveler, offering dynamic, personalized recommendations and helping users experience Japan with ease. Whether you’re an international traveler looking for recommendations in English or a local navigating the crowded streets during peak travel seasons, *Sakura Guide* ensures you’re never stuck with outdated or irrelevant advice.
 
 ### User Query in Action 🎯
-![Screenshot of User Query](query_eng.jpg)
-
+![query_eng](https://github.com/user-attachments/assets/4d9935f6-b114-4af7-a8f7-aa6113b15af4)
+![query_jp](https://github.com/user-attachments/assets/5571b0b0-ef0c-4bbd-a7ab-cab6e2a23c09)
 _The user asks for top recommendations in Kyoto, and Sakura Guide provides real-time, location-specific travel insights using Azure Cognitive Search._
 
 ---
@@ -31,7 +32,7 @@ Here’s what powers the **seamless experience** behind **Sakura Guide**:
 - **Azure Translator** 🌐: Breaking down language barriers, this technology allows **Sakura Guide** to seamlessly switch between English and Japanese, ensuring inclusivity for both international and domestic tourists.
 
 ### Sakura Guide Technology Architecture 🏗️
-![Sakura Guide Architecture](TechnologyArchitecture.jpg)
+[TechnicalArchitecture](https://github.com/user-attachments/assets/fae1a853-3ab2-4bc3-9c03-c26d7bea6dda)
 
 _A diagram illustrating how FastAPI, Azure Cognitive Search, Cosmos DB, and Azure Translator work together to provide seamless travel recommendations._
 
@@ -52,8 +53,9 @@ Whether it’s navigating Kyoto’s temples or finding the best ramen in Osaka, 
 ### Instant, Location-Based Recommendations:
 - **Sakura Guide** provides users with instant, **location-specific travel recommendations** based on their exact needs at that moment. For example, asking, *"What’s the best thing to do in Kyoto today?"* results in recommendations tailored specifically to your preferences.
 
+
 ### Azure Cognitive Search JSON Results 📊
-![Screenshot of Azure Cognitive Search JSON](path_to_image)
+![azureaisearch](https://github.com/user-attachments/assets/8a8513cc-c5b2-485f-9252-fd5ad776e763)
 
 _Azure Cognitive Search JSON output for real-time travel recommendations. The app retrieves the most relevant travel data based on the user's location and query._
 
@@ -66,7 +68,8 @@ _Azure Cognitive Search JSON output for real-time travel recommendations. The ap
 - Every query is stored in **Cosmos DB**, enabling future versions of the app to offer **personalized recommendations** based on the user’s past interactions. Imagine an app that remembers the types of places you love—and gives you suggestions even before you ask.
 
 ### Cosmos DB Query Logs 🗄️
-![Screenshot of Cosmos DB Query Logs](path_to_image)
+![cosmos db example](https://github.com/user-attachments/assets/7322ab3a-e329-430b-a844-c9faaca6bbd3)
+
 
 _Example of user queries stored in Cosmos DB, allowing for personalized future recommendations based on interaction data._
 
