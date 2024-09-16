@@ -32,7 +32,7 @@ Here’s what powers the **seamless experience** behind **Sakura Guide**:
 - **Azure Translator** 🌐: Breaking down language barriers, this technology allows **Sakura Guide** to seamlessly switch between English and Japanese, ensuring inclusivity for both international and domestic tourists.
 
 ### Sakura Guide Technology Architecture 🏗️
-![Sakura Guide pptx (6)](https://github.com/user-attachments/assets/f82d5894-232c-47d3-b517-01c8fe598427)
+![TechnicalArchitecture](https://github.com/user-attachments/assets/96e6051c-be5d-4357-80ac-80208f52190f)
 _A diagram illustrating how FastAPI, Azure Cognitive Search, Cosmos DB, and Azure Translator work together to provide seamless travel recommendations._
 
 ---
