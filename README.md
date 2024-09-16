@@ -17,7 +17,7 @@ Powered by the latest in AI and cloud technology, **Sakura Guide** adapts to eac
 
 ### User Query in Action 🎯
 ![query_eng](https://github.com/user-attachments/assets/4d9935f6-b114-4af7-a8f7-aa6113b15af4)
-![query_jp](https://github.com/user-attachments/assets/5571b0b0-ef0c-4bbd-a7ab-cab6e2a23c09)
+![query_jp](https://github.com/user-attachments/assets/cb7e5bf7-9131-47cd-9c24-006534789a99)
 _The user asks for top recommendations in Kyoto, and Sakura Guide provides real-time, location-specific travel insights using Azure Cognitive Search._
 
 ---
@@ -32,8 +32,7 @@ Here’s what powers the **seamless experience** behind **Sakura Guide**:
 - **Azure Translator** 🌐: Breaking down language barriers, this technology allows **Sakura Guide** to seamlessly switch between English and Japanese, ensuring inclusivity for both international and domestic tourists.
 
 ### Sakura Guide Technology Architecture 🏗️
-[TechnicalArchitecture](https://github.com/user-attachments/assets/fae1a853-3ab2-4bc3-9c03-c26d7bea6dda)
-
+![Sakura Guide pptx (6)](https://github.com/user-attachments/assets/f82d5894-232c-47d3-b517-01c8fe598427)
 _A diagram illustrating how FastAPI, Azure Cognitive Search, Cosmos DB, and Azure Translator work together to provide seamless travel recommendations._
 
 ---
