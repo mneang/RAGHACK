@@ -108,7 +108,7 @@ _Example of user queries stored in Cosmos DB, allowing for personalized future r
 ### Steps:
 1. **Clone the Repository**:
    ```bash
-   git clone <repository_url>
+   git clone https://github.com/mneang/Sakura-Guide
 
 2. **Install Dependencies**:
    ```bash
